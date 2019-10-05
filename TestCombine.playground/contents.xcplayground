@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<playground version='6.0' target-platform='ios'>
+    <pages>
+        <page name='Test CustomSubscriber'/>
+        <page name='Replay'/>
+        <page name='CreatePublisher'/>
+        <page name='Alfonso'/>
+        <page name='Backpressure'/>
+    </pages>
+</playground>

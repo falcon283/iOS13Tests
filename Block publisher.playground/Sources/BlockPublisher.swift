@@ -11,10 +11,8 @@ public extension Publishers {
         }
         
         public func receive<S>(subscriber: S) where S : Subscriber, Failure == S.Failure, Output == S.Input {
-            let subscription = BlockSubscription(subscriber: AnySubscriber(subscriber))
+            let subscription = BlockSubscription(subscriber: AnySubscriber(subscriber), creationClosure: creationClosure)
             subscriber.receive(subscription: subscription)
-            let action = creationClosure(subscription)
-            subscription.cancelAction = action
         }
     }
 }
@@ -27,16 +25,19 @@ public extension Publishers.BlockPublisher {
         
         private var subscriber: AnySubscriber<Output, Failure>?
         private var demand: Subscribers.Demand = .none
+        private let creationClosure: (BlockSubscription) -> CancelClosure
         internal var cancelAction: CancelClosure?
         
-        init(subscriber: AnySubscriber<Output, Failure>) {
+        init(subscriber: AnySubscriber<Output, Failure>, creationClosure: @escaping (BlockSubscription) -> CancelClosure) {
             self.subscriber = subscriber
+            self.creationClosure = creationClosure
         }
         
         // MARK: Subscription protocol
         
         public func request(_ demand: Subscribers.Demand) {
             self.demand = demand
+            self.cancelAction = creationClosure(self)
         }
         
         public func cancel() {

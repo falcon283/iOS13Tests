@@ -3,7 +3,7 @@
 import Foundation
 import Combine
 
-class BackpressureSubscriber<Input, Failure: Error>: Subscriber {
+private class BackpressureSubscriber<Input, Failure: Error>: Subscriber {
 
     private let demand: Subscribers.Demand
     @Synchronized private var subscription: Subscription?
@@ -18,25 +18,18 @@ class BackpressureSubscriber<Input, Failure: Error>: Subscriber {
     }
 
     func receive(subscription: Subscription) {
-        print("receive Subscription")
         self.subscription = subscription
         subscription.request(demand)
     }
 
     func receive(_ input: Input) -> Subscribers.Demand {
-//        print("Receive input")
         return receiveValue?(input) ?? .none
     }
 
     func receive(completion: Subscribers.Completion<Failure>) {
-        print("Receive completion")
         receiveCompletion?(completion)
         receiveCompletion = nil
         receiveValue = nil
-    }
-
-    deinit {
-        print("deinit")
     }
 
     fileprivate func free() {

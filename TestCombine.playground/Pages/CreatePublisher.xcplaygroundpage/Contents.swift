@@ -122,17 +122,17 @@ let createPublisher = CreatePublisher<Int, Never>(maxRequests: 6) { subscription
 public class Observer<Input, Failure: Error> {
 
     @Synchronized private var isCancelled: Bool = false
-    private let receiveClosure: (Input) -> Subscribers.Demand
+    private let receiveClosure: (Input) -> Void
     private let receiveCompletionClosure: (Subscribers.Completion<Failure>) -> Void
 
-    init(receive: @escaping (Input) -> Subscribers.Demand, receiveCompletion: @escaping (Subscribers.Completion<Failure>) -> Void) {
+    init(receive: @escaping (Input) -> Void, receiveCompletion: @escaping (Subscribers.Completion<Failure>) -> Void) {
         receiveClosure = receive
         receiveCompletionClosure = receiveCompletion
     }
 
-    public func receive(_ input: Input) -> Subscribers.Demand {
-        guard isCancelled == false else { return .none }
-        return receiveClosure(input)
+    public func receive(_ input: Input) -> Void {
+        guard isCancelled == false else { return }
+        receiveClosure(input)
     }
 
     public func receive(completion: Subscribers.Completion<Failure>) -> Void {
@@ -147,46 +147,66 @@ public class Observer<Input, Failure: Error> {
 
 public struct Orchestrator {
     public let stop: () -> Void
-    public let start: (Subscribers.Demand) -> Void
+    public let start: () -> Void
 }
 
-public typealias CreationTask<Input, Failure: Error> = (Observer<Input, Failure>, Subscribers.Demand) -> Orchestrator
+public protocol DemandLogic {
+    func request(_ demand: Subscribers.Demand)
+    func receiveIfAllowed(_ receive: () -> Subscribers.Demand)
+}
+
+public class DefaultDemand: DemandLogic {
+
+    @Synchronized private var residualDemand: Subscribers.Demand = .unlimited
+
+    public func request(_ demand: Subscribers.Demand) {
+        self.residualDemand = demand
+    }
+
+    public func receiveIfAllowed(_ receive: () -> Subscribers.Demand) {
+        guard residualDemand > .max(0) else { return }
+        residualDemand -= .max(1)
+        residualDemand += receive()
+    }
+}
+
+public typealias CreationTask<Input, Failure: Error> = (Observer<Input, Failure>) -> Orchestrator
 
 public struct Create<Output, Failure: Error>: Publisher {
 
     private let task: CreationTask<Output, Failure>
-    private let demand: Subscribers.Demand
 
-    public init(maxValues: Subscribers.Demand = .unlimited, task: @escaping CreationTask<Output, Failure>) {
-        self.demand = maxValues
+    public init(task: @escaping CreationTask<Output, Failure>) {
         self.task = task
     }
 
     public func receive<S>(subscriber: S) where S : Subscriber, Failure == S.Failure, Output == S.Input {
-        subscriber.receive(subscription: CreateSubscription(publisher: self, subscriber: AnySubscriber(subscriber), maxValues: demand))
+        subscriber.receive(subscription: CreateSubscription(publisher: self, subscriber: AnySubscriber(subscriber)))
     }
 
     private class CreateSubscription<Input, Failure: Error>: Subscription {
 
         @Synchronized private var subscriber: AnySubscriber<Input, Failure>?
+        private let demandTracker = DefaultDemand()
         private var orchestrator: Orchestrator?
 
-        init(publisher: Create<Input, Failure>, subscriber: AnySubscriber<Input, Failure>, maxValues: Subscribers.Demand) {
+        init(publisher: Create<Input, Failure>, subscriber: AnySubscriber<Input, Failure>) {
             self.subscriber = subscriber
 
             let observer = Observer<Input, Failure>(
                 receive: { [weak self] input in
-                    self?.subscriber?.receive(input) ?? .none
+                    self?.demandTracker.receiveIfAllowed { self?.subscriber?.receive(input) ?? .none }
                 },
                 receiveCompletion: { [weak self] completion in
                     self?.subscriber?.receive(completion: completion)
             })
 
-            orchestrator = publisher.task(observer, maxValues)
+            orchestrator = publisher.task(observer)
         }
 
         func request(_ demand: Subscribers.Demand) {
-            orchestrator?.start(demand)
+            demandTracker.request(demand)
+            orchestrator?.start()
         }
 
         func cancel() {
@@ -196,24 +216,19 @@ public struct Create<Output, Failure: Error>: Publisher {
     }
 }
 
-let c = Create<Int, Never>(maxValues: .max(10)) { observer, maxValues in
+let c = Create<Int, Never> { observer in
 
-    var currenctRequest: Subscribers.Demand!
     let item = DispatchWorkItem {
 
-        let values = [0, 1, 2, 3, 4]
-        var requested = min(currenctRequest, maxValues)
-        for value in values {
-            guard requested > .max(0) else { break }
-            requested -= .max(1)
-            requested = min(requested + observer.receive(value), maxValues)
+        for i in 0..<1000 {
+            observer.receive(i)
         }
 
         observer.receive(completion: .finished)
     }
     
     return Orchestrator(stop: { item.cancel() },
-                        start: { request in currenctRequest = request; DispatchQueue.global().async(execute: item) })
+                        start: { DispatchQueue.global().async(execute: item) })
 }
 .print()
 .sink {

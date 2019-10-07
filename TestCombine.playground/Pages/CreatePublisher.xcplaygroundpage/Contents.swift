@@ -148,6 +148,8 @@ public class Observer<Input, Failure: Error> {
 public struct Orchestrator {
     public let stop: () -> Void
     public let start: () -> Void
+
+    static let empty = Orchestrator(stop: {}, start: {})
 }
 
 public protocol DemandLogic {
@@ -170,28 +172,36 @@ public class DefaultDemand: DemandLogic {
     }
 }
 
-public typealias CreationTask<Input, Failure: Error> = (Observer<Input, Failure>) -> Orchestrator
+public typealias AsyncTask<Input, Failure: Error> = (Observer<Input, Failure>) -> Orchestrator
 
-public struct Create<Output, Failure: Error>: Publisher {
+public struct Async<Output, Failure: Error>: Publisher {
 
-    private let task: CreationTask<Output, Failure>
+    private let task: AsyncTask<Output, Failure>
 
-    public init(task: @escaping CreationTask<Output, Failure>) {
+    public init(task: @escaping AsyncTask<Output, Failure>) {
         self.task = task
     }
 
     public func receive<S>(subscriber: S) where S : Subscriber, Failure == S.Failure, Output == S.Input {
-        subscriber.receive(subscription: CreateSubscription(publisher: self, subscriber: AnySubscriber(subscriber)))
+        subscriber.receive(subscription: AsyncSubscription(publisher: self, subscriber: AnySubscriber(subscriber)))
     }
 
-    private class CreateSubscription<Input, Failure: Error>: Subscription {
+    private class AsyncSubscription<Input, Failure: Error>: Subscription {
 
         @Synchronized private var subscriber: AnySubscriber<Input, Failure>?
-        private let demandTracker = DefaultDemand()
-        private var orchestrator: Orchestrator?
+        @Synchronized private var orchestrator: Orchestrator?
+        @Synchronized private var observer: Observer<Input, Failure>?
 
-        init(publisher: Create<Input, Failure>, subscriber: AnySubscriber<Input, Failure>) {
+        private let publisher: Async<Input, Failure>
+        private let demandTracker = DefaultDemand()
+
+        init(publisher: Async<Input, Failure>, subscriber: AnySubscriber<Input, Failure>) {
+            self.publisher = publisher
             self.subscriber = subscriber
+        }
+
+        func request(_ demand: Subscribers.Demand) {
+            demandTracker.request(demand)
 
             let observer = Observer<Input, Failure>(
                 receive: { [weak self] input in
@@ -201,37 +211,55 @@ public struct Create<Output, Failure: Error>: Publisher {
                     self?.subscriber?.receive(completion: completion)
             })
 
+            self.observer = observer
             orchestrator = publisher.task(observer)
-        }
-
-        func request(_ demand: Subscribers.Demand) {
-            demandTracker.request(demand)
             orchestrator?.start()
         }
 
         func cancel() {
+            observer?.cancel()
             subscriber = nil
             orchestrator?.stop()
         }
     }
 }
 
-let c = Create<Int, Never> { observer in
+extension DispatchQueue {
 
-    let item = DispatchWorkItem {
-
-        for i in 0..<1000 {
-            observer.receive(i)
-        }
-
-        observer.receive(completion: .finished)
+    func publisher<Output, Failure: Error>(_ task: @escaping AsyncTask<Output, Failure>) -> AnyPublisher<Output, Failure> {
+        return Async(task: task).subscribe(on: self).eraseToAnyPublisher()
     }
-    
-    return Orchestrator(stop: { item.cancel() },
-                        start: { DispatchQueue.global().async(execute: item) })
+}
+
+//let c = Async<Int, Never> { observer in
+//
+//    let item = DispatchWorkItem {
+//
+//        for i in 0..<10 {
+//            observer.receive(i)
+//        }
+//
+//        observer.receive(completion: .finished)
+//    }
+//
+//    return Orchestrator(stop: { item.cancel() },
+//                        start: { DispatchQueue.global().async(execute: item) })
+//}
+//.print()
+//.sink {
+//    print("Value: \($0)")
+//}
+//c.cancel()
+
+let c = DispatchQueue.global().publisher { (observer: Observer<Int, Never>) in
+
+    observer.receive(5)
+    observer.receive(15)
+    observer.receive(25)
+
+    observer.receive(completion: .finished)
+
+    return .empty
 }
 .print()
-.sink {
-    print("Value: \($0)")
-}
-//c.cancel()
+    .sink { _ in }

@@ -43,28 +43,68 @@ extension Publishers {
             return multicast.connect()
         }
     }
+
+    public class ShareReplay<Output, Failure: Error>: Publisher {
+
+        let upstream: Replay<Output, Failure>
+
+        public init<P: Publisher>(buffer size: Int, upstream: P) where P.Output == Output, P.Failure == Failure {
+            self.upstream = upstream.replay(buffer: size)
+        }
+
+        public func receive<S>(subscriber: S) where S : Subscriber, Failure == S.Failure, Output == S.Input {
+            upstream
+                .autoconnect()
+                .receive(subscriber: subscriber)
+        }
+    }
 }
 
 extension Publisher {
 
-    func replay2(buffer size: Int = 1) -> Publishers.Replay<Output, Failure> {
+    func replay(buffer size: Int = 1) -> Publishers.Replay<Output, Failure> {
         Publishers.Replay(buffer: size, upstream: self)
+    }
+
+    func shareReplay(buffer size: Int = 1) -> Publishers.ShareReplay<Output, Failure> {
+        Publishers.ShareReplay(buffer: size, upstream: self)
     }
 }
 
-let t = PassthroughSubject<Int, Never>()
-let r2 = t.replay2(buffer: 3).autoconnect()
+// Replay Test
 
-let cc = r2
+//let t1 = PassthroughSubject<Int, Never>()
+//let r1 = t1.replay(buffer: 3).autoconnect()
+//
+//let c1 = r1
+//    .sink { _ in }
+//
+//t1.send(0)
+//t1.send(1)
+//t1.send(2)
+//t1.send(3)
+//t1.send(completion: .finished)
+//
+//let c2 = r1
+//    .print()
+//    .sink { _ in }
+
+// Share Replay Test
+
+let t2 = PassthroughSubject<Int, Never>()
+let r2 = t2.shareReplay(buffer: 3)
+
+let c3 = r2
 //    .print()
     .sink { _ in }
 
-t.send(0)
-t.send(1)
-t.send(2)
-t.send(3)
-t.send(completion: .finished)
+t2.send(0)
+t2.send(1)
+t2.send(2)
+t2.send(3)
+t2.send(completion: .finished)
 
-let ccc = r2
-.print()
-.sink { _ in }
+let c4 = r2
+    .print()
+    .sink { _ in }
+

@@ -1,3 +1,5 @@
+//: [Previous](@previous)
+
 import Combine
 import Foundation
 
@@ -117,3 +119,6 @@ DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
         .sink(receiveValue: { print($0) } )
         .store(in: &subscriptions)
 }
+
+
+//: [Next](@next)

@@ -1,3 +1,5 @@
+//: [Previous](@previous)
+
 import Combine
 import UIKit
 import PlaygroundSupport
@@ -22,3 +24,5 @@ let cancellable = publisher.sink { _ in
 }
 
 PlaygroundPage.current.liveView = view
+
+//: [Next](@next)

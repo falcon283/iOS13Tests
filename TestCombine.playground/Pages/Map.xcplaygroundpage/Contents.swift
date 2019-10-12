@@ -1,3 +1,5 @@
+//: [Previous](@previous)
+
 import Combine
 import Foundation
 import PlaygroundSupport
@@ -72,3 +74,6 @@ extension Publisher {
     .delay(for: 1, scheduler: RunLoop.main)
     .customMap { Array(repeating: "1", count: $0).joined() }
     .sink(receiveCompletion: { print($0) }, receiveValue: { print($0) })
+
+
+//: [Next](@next)

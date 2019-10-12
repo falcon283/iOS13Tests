@@ -1,3 +1,5 @@
+//: [Previous](@previous)
+
 import Combine
 import Foundation
 import PlaygroundSupport
@@ -31,3 +33,5 @@ publisher
 let sub = publisher
     .print("sink")
     .sink(receiveCompletion: { print($0) }, receiveValue: { print($0) })
+
+//: [Next](@next)

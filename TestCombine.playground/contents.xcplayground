@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<playground version='6.0' target-platform='ios'>
+<playground version='6.0' target-platform='ios' display-mode='raw'>
     <pages>
         <page name='Test CustomSubscriber'/>
         <page name='Replay'/>
         <page name='CreatePublisher'/>
-        <page name='Alfonso'/>
         <page name='Backpressure'/>
+        <page name='UIControlPublisher'/>
+        <page name='Block Publisher'/>
+        <page name='Replay Alfonso'/>
+        <page name='Map'/>
     </pages>
 </playground>
